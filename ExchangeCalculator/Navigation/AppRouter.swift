@@ -11,15 +11,10 @@ protocol AppRouting: AnyObject {
     func showCurrencyPicker()
 }
 
-enum AppSheet: Identifiable, Equatable {
+enum AppSheet: String, Identifiable, Equatable {
     case currencyPicker
 
-    var id: String {
-        switch self {
-        case .currencyPicker:
-            "currencyPicker"
-        }
-    }
+    var id: String { rawValue }
 }
 
 @Observable

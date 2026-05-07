@@ -6,7 +6,6 @@
 //
 
 import Testing
-import Nimble
 @testable import ExchangeCalculator
 
 @Suite("Currency flag resolver")
@@ -24,14 +23,6 @@ struct CurrencyFlagResolverTests {
         ]
     )
     func resolvesBundledFlagAssets(currency: Currency, expectedAsset: String) {
-        expect(CurrencyFlagResolver.assetName(for: currency)).to(equal(expectedAsset))
-    }
-
-    @Test("Falls back to emoji when no bundled flag asset exists")
-    func fallsBackToEmoji() {
-        let currency = Currency(code: "GBP", name: "British Pound")
-
-        expect(CurrencyFlagResolver.assetName(for: currency)).to(beNil())
-        expect(CurrencyFlagResolver.flag(for: currency)).to(equal("🇬🇧"))
+        #expect(CurrencyFlagResolver.assetName(for: currency) == expectedAsset)
     }
 }

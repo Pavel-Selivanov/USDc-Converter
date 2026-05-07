@@ -7,9 +7,8 @@
 
 import Foundation
 
-struct ExchangeRateSnapshot: Equatable {
+nonisolated struct ExchangeRateSnapshot: Equatable, Sendable {
     let rate: ExchangeRate
     let fetchedAt: Date
     let isStale: Bool
 }
-

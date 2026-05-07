@@ -19,7 +19,7 @@ struct CurrencyPickerList: View {
     let onSelect: (Currency) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Size.Spacing.small) {
             ForEach(currencies) { currency in
                 Button {
                     onSelect(currency)
@@ -59,7 +59,7 @@ struct CurrencyPickerList: View {
 #if DEBUG
 #Preview {
     CurrencyPickerList(
-        currencies: FallbackCurrencyDataSource.supportedCurrencies,
+        currencies: CurrencyCatalog.fallbackQuoteCurrencies,
         selected: .mxn,
         onSelect: { _ in }
     )

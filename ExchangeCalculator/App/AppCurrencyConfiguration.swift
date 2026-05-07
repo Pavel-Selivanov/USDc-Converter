@@ -8,5 +8,7 @@
 enum AppCurrencyConfiguration {
     /// Change this line to switch the app's primary currency.
     static let primaryCurrency: Currency = .usdc
-}
 
+    /// Initial quote currency used when the user has not selected one yet.
+    static let defaultQuoteCurrency: Currency = .brl
+}

@@ -7,8 +7,8 @@
 
 import Foundation
 
-struct CurrencyListSnapshot: Equatable {
-    enum Source: Equatable {
+nonisolated struct CurrencyListSnapshot: Equatable, Sendable {
+    nonisolated enum Source: Equatable, Sendable {
         case remote
         case cache
         case fallback
@@ -18,4 +18,3 @@ struct CurrencyListSnapshot: Equatable {
     let source: Source
     let updatedAt: Date?
 }
-

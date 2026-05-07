@@ -7,7 +7,6 @@
 
 import Foundation
 
-/// Maps ISO 4217 currency codes to Unicode country-flag emoji.
 enum CurrencyFlagResolver {
     static func assetName(for currency: Currency) -> String? {
         currencyToFlagAsset[currency.code.uppercased()]
@@ -15,7 +14,7 @@ enum CurrencyFlagResolver {
 
     static func flag(for currency: Currency) -> String {
         let currencyCode = currency.code.uppercased()
-        guard let countryCode = currencyToCountry[currencyCode] else {
+        guard let countryCode = currencyToCountryCode[currencyCode] else {
             return "🏳️"
         }
         return countryCode.countryFlagEmoji
@@ -29,6 +28,16 @@ private let currencyToFlagAsset: [String: String] = [
     "EUR": "Flags/EU",
     "MXN": "Flags/MEX",
     "USDC": "Flags/USA",
+]
+
+private let currencyToCountryCode: [String: String] = [
+    "MXN": "MX",
+    "ARS": "AR",
+    "BRL": "BR",
+    "COP": "CO",
+    "USD": "US",
+    "USDC": "US",
+    "EUR": "EU",
 ]
 
 private extension String {

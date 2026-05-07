@@ -8,16 +8,19 @@
 import Observation
 import Foundation
 
+@MainActor
 @Observable
 final class ExchangeViewModel {
-    typealias LoadCurrencies = () async -> CurrencyListSnapshot
-    typealias LoadExchangeRate = (_ quote: Currency, _ forceRefresh: Bool) async throws -> ExchangeRateSnapshot
+    typealias LoadCachedExchangeData = () async -> ExchangeDataSnapshot?
+    typealias LoadExchangeData = () async throws -> ExchangeDataLoadOutcome
+    typealias OnQuoteCurrencySelected = (Currency) -> Void
+    typealias NetworkStatusUpdates = () -> AsyncStream<Bool>
 
     // MARK: - State
 
     private(set) var sourceCurrency: Currency
     private(set) var targetCurrency: Currency
-    private(set) var pickableCurrencies: [Currency]
+    private(set) var availableCurrencies: [Currency]
 
     var sourceText: String = ""
     var targetText: String = ""
@@ -25,116 +28,151 @@ final class ExchangeViewModel {
     private(set) var exchangeRate: ExchangeRate?
     private(set) var isLoadingRate: Bool = false
     private(set) var rateStatusText: String?
+    private(set) var rateStatusIconName: String?
+    private(set) var rateStatusTone: RateStatusTone = .hidden
     private(set) var rateErrorText: String?
+    private(set) var showsManualRefresh: Bool = false
 
-    /// Toggles each time `swapCurrencies()` is called. Drives the slot order
-    /// in the view so SwiftUI's diff sees the field views move between slots,
-    /// producing the matchedGeometryEffect slide animation.
+    /// Toggles each time `swapCurrencies()` is called. Drives the visual field
+    /// order while keeping the source and target views stable in the hierarchy.
     private(set) var isSwapped: Bool = false
 
     // MARK: - Input limits
 
-    /// Maximum value a user may type into either field.
-    static let maxInputValue: Decimal = 10_000_000_000
+    /// Maximum source-currency equivalent a user may type.
+    nonisolated static let maxInputValue: Decimal = AmountInputFormatter.maxInputValue
 
     /// Maximum number of digits allowed after the decimal point.
-    static let maxFractionDigits: Int = 2
+    nonisolated static let maxFractionDigits: Int = AmountInputFormatter.maxFractionDigits
 
     @ObservationIgnored private var lastValidSourceText: String = ""
     @ObservationIgnored private var lastValidTargetText: String = ""
     @ObservationIgnored private var lastEditedField: FieldFocus?
-    @ObservationIgnored private var rateRequestID: Int = 0
-    @ObservationIgnored private let loadCurrencies: LoadCurrencies
-    @ObservationIgnored private let loadExchangeRate: LoadExchangeRate
+    @ObservationIgnored private var dataRequestID: Int = 0
+    @ObservationIgnored private var dataLoadTask: Task<Result<ExchangeDataLoadOutcome, Error>, Never>?
+    @ObservationIgnored private var networkStatusTask: Task<Void, Never>?
+    @ObservationIgnored private var exchangeRatesByQuoteCode: [String: ExchangeRateSnapshot] = [:]
+    @ObservationIgnored private let loadCachedExchangeData: LoadCachedExchangeData
+    @ObservationIgnored private let loadExchangeData: LoadExchangeData
+    @ObservationIgnored private let onQuoteCurrencySelected: OnQuoteCurrencySelected
+    @ObservationIgnored private let networkStatusUpdates: NetworkStatusUpdates
 
     // MARK: - Derived
 
-    /// The rate as it should appear in the header — flipped when `isSwapped`
-    /// so the displayed direction always matches the visual top→bottom order
-    /// of the fields.
+    /// unswapped shows the bid side, swapped shows the ask side.
     var displayRate: String? {
         guard let rate = exchangeRate else { return nil }
-        return (isSwapped ? rate.reversed : rate).displayString
+        return ExchangeRateStatusPresenter.rateDisplayText(for: rate, usingAsk: isSwapped)
     }
 
     var canEditAmounts: Bool {
-        exchangeRate != nil
+        !availableCurrencies.isEmpty && exchangeRate != nil
     }
 
     init(
-        sourceCurrency: Currency = CurrencyCatalog.baseCurrency,
-        targetCurrency: Currency = CurrencyCatalog.fallbackCurrencies[0],
-        pickableCurrencies: [Currency] = CurrencyCatalog.fallbackCurrencies,
+        sourceCurrency: Currency,
+        targetCurrency: Currency,
+        availableCurrencies: [Currency],
+        initialExchangeData: ExchangeDataSnapshot? = nil,
         exchangeRate: ExchangeRate? = nil,
-        loadCurrencies: @escaping LoadCurrencies = {
-            CurrencyListSnapshot(
-                currencies: CurrencyCatalog.fallbackCurrencies,
-                source: .fallback,
-                updatedAt: nil
-            )
+        loadCachedData: @escaping LoadCachedExchangeData = { nil },
+        loadData: @escaping LoadExchangeData = {
+            throw ExchangeViewModelError.dataUnavailable
         },
-        loadExchangeRate: @escaping LoadExchangeRate = { _, _ in
-            throw ExchangeViewModelError.rateUnavailable
+        onQuoteCurrencySelected: @escaping OnQuoteCurrencySelected = { _ in },
+        networkStatusUpdates: @escaping NetworkStatusUpdates = {
+            AsyncStream { continuation in
+                continuation.finish()
+            }
         }
     ) {
         self.sourceCurrency = sourceCurrency
         self.targetCurrency = targetCurrency
-        self.pickableCurrencies = pickableCurrencies
+        self.availableCurrencies = availableCurrencies
         self.exchangeRate = exchangeRate
-        self.loadCurrencies = loadCurrencies
-        self.loadExchangeRate = loadExchangeRate
-        self.rateStatusText = exchangeRate.map { Self.updatedText(for: $0.quotedAt, isStale: false) }
+        self.loadCachedExchangeData = loadCachedData
+        self.loadExchangeData = loadData
+        self.onQuoteCurrencySelected = onQuoteCurrencySelected
+        self.networkStatusUpdates = networkStatusUpdates
+
+        if let initialExchangeData {
+            self.availableCurrencies = initialExchangeData.currencyList.currencies
+            self.exchangeRatesByQuoteCode = initialExchangeData.exchangeRatesByQuoteCode
+
+            if !availableCurrencies.contains(targetCurrency),
+               let firstCurrency = availableCurrencies.first {
+                self.targetCurrency = firstCurrency
+            }
+
+            if initialExchangeData.exchangeRatesByQuoteCode[self.targetCurrency.code.uppercased()] == nil,
+               let firstRatedCurrency = availableCurrencies.first(where: {
+                   initialExchangeData.exchangeRatesByQuoteCode[$0.code.uppercased()] != nil
+               }) {
+                self.targetCurrency = firstRatedCurrency
+            }
+
+            let key = self.targetCurrency.code.uppercased()
+            if let snapshot = initialExchangeData.exchangeRatesByQuoteCode[key] {
+                self.exchangeRate = snapshot.rate
+            }
+        } else if let exchangeRate {
+            seedInitialRate(exchangeRate)
+        }
+
+        observeNetworkStatus()
+    }
+
+    deinit {
+        networkStatusTask?.cancel()
     }
 
     // MARK: - User actions
 
     func loadInitialData() async {
-        let snapshot = await loadCurrencies()
-
-        pickableCurrencies = snapshot.currencies
-
-        if !snapshot.currencies.contains(targetCurrency),
-           let firstCurrency = snapshot.currencies.first {
-            targetCurrency = firstCurrency
-            clearCalculatedText()
+        if exchangeRatesByQuoteCode.isEmpty,
+           let cachedSnapshot = await loadCachedExchangeData() {
+            applyDataSnapshot(cachedSnapshot, showsStaleRateStatus: false)
         }
 
-        await refreshRate(forceRefresh: false)
+        await refreshData()
     }
 
-    func refreshRate(forceRefresh: Bool = true) async {
-        rateRequestID += 1
-        let requestID = rateRequestID
-        let requestedCurrency = targetCurrency
+    func refreshData() async {
+        dataLoadTask?.cancel()
+        dataRequestID += 1
 
+        let requestID = dataRequestID
+        let task = Task<Result<ExchangeDataLoadOutcome, Error>, Never> { [loadExchangeData] in
+            do {
+                return .success(try await loadExchangeData())
+            } catch {
+                return .failure(error)
+            }
+        }
+        dataLoadTask = task
         isLoadingRate = true
         rateErrorText = nil
+        showsManualRefresh = false
 
-        do {
-            let snapshot = try await loadExchangeRate(requestedCurrency, forceRefresh)
-            guard requestID == rateRequestID, requestedCurrency == targetCurrency else {
-                return
-            }
-
-            exchangeRate = snapshot.rate
-            rateStatusText = Self.updatedText(
-                for: snapshot.rate.quotedAt,
-                isStale: snapshot.isStale
-            )
-            rateErrorText = snapshot.isStale ? "Using the last available rate." : nil
-            recomputeAfterRateChange()
-        } catch {
-            guard requestID == rateRequestID, requestedCurrency == targetCurrency else {
-                return
-            }
-
-            exchangeRate = nil
-            rateStatusText = nil
-            rateErrorText = "Rate unavailable. Pull to retry when you're online."
-            clearAllAmountText()
+        let result = await task.value
+        guard requestID == dataRequestID else {
+            return
         }
 
+        dataLoadTask = nil
         isLoadingRate = false
+
+        switch result {
+        case .success(.complete(let snapshot)):
+            applyDataSnapshot(snapshot, showsStaleRateStatus: true)
+        case .success(.ratesUnavailable(let currencyList, let underlying)):
+            applyCurrencyListOnly(currencyList)
+            handleRefreshFailure(underlying)
+        case .failure(let error) where error is CancellationError:
+            break
+        case .failure(let error):
+            handleRefreshFailure(error)
+        }
     }
 
     /// Called when the user edits the source field.
@@ -145,27 +183,33 @@ final class ExchangeViewModel {
         }
 
         lastEditedField = .source
-        let raw = newValue.replacingOccurrences(of: ",", with: "")
+        let raw = AmountInputFormatter.canonicalAmountInput(
+            newValue,
+            previousFormattedInput: lastValidSourceText
+        )
 
-        guard Self.isWithinLimits(raw) else {
-            sourceText = lastValidSourceText   // revert — input not accepted
+        guard AmountInputFormatter.isWithinLimits(raw) else {
+            sourceText = lastValidSourceText
             return
         }
 
-        let formatted = Self.withGroupingSeparator(raw)
+        let formatted = AmountInputFormatter.withGroupingSeparator(raw)
         sourceText = formatted
         lastValidSourceText = formatted
 
         guard
             !raw.isEmpty,
-            let amount = Decimal(string: Self.parseable(raw), locale: .usParsing),
+            let amount = AmountInputFormatter.decimal(from: raw),
             let rate = exchangeRate
         else {
             if raw.isEmpty { targetText = "" }
             return
         }
         
-        setCalculatedTargetText(rate.convert(amount))
+        let convertedAmount = isSwapped
+            ? rate.convertUsingAsk(amount)
+            : rate.convert(amount)
+        setCalculatedTargetText(convertedAmount)
     }
 
     /// Called when the user edits the target field.
@@ -176,20 +220,23 @@ final class ExchangeViewModel {
         }
 
         lastEditedField = .target
-        let raw = newValue.replacingOccurrences(of: ",", with: "")
+        let raw = AmountInputFormatter.canonicalAmountInput(
+            newValue,
+            previousFormattedInput: lastValidTargetText
+        )
 
-        guard Self.isWithinLimits(raw) else {
-            targetText = lastValidTargetText   // revert — input not accepted
+        guard AmountInputFormatter.isWithinLimits(raw, maxValue: maxTargetInputValue) else {
+            targetText = lastValidTargetText
             return
         }
 
-        let formatted = Self.withGroupingSeparator(raw)
+        let formatted = AmountInputFormatter.withGroupingSeparator(raw)
         targetText = formatted
         lastValidTargetText = formatted
 
         guard
             !raw.isEmpty,
-            let amount = Decimal(string: Self.parseable(raw), locale: .usParsing),
+            let amount = AmountInputFormatter.decimal(from: raw),
             let rate = exchangeRate
         else {
             if raw.isEmpty { sourceText = "" }
@@ -202,125 +249,178 @@ final class ExchangeViewModel {
     /// displayed pair stays consistent.
     ///
     /// The base (`sourceCurrency`) is fixed by product configuration, and
-    /// `swapCurrencies()` only reorders slots without mutating data — so the
-    /// quote is always `targetCurrency`, regardless of `isSwapped`.
+    /// `swapCurrencies()` only reorders slots and changes the active spread
+    /// side — so the quote is always `targetCurrency`, regardless of
+    /// `isSwapped`.
     func selectQuoteCurrency(_ currency: Currency) async {
         guard currency != targetCurrency else { return }
 
         targetCurrency = currency
-        exchangeRate = nil
-        rateStatusText = nil
+        onQuoteCurrencySelected(currency)
         rateErrorText = nil
-        clearCalculatedText()
-
-        await refreshRate(forceRefresh: true)
+        applySelectedRate()
     }
 
-    /// Swaps the two fields by toggling slot order, not by mutating data.
+    /// Swaps the two fields by toggling visual order and recomputing the paired
+    /// amount against the active side of the spread.
     ///
     /// The source/target data stays where it is; only `isSwapped` flips, which
-    /// reorders the slots in the view. SwiftUI's diff then sees the same view
-    /// instance move from one slot to the other, and `matchedGeometryEffect`
-    /// interpolates its frame — producing the slide animation.
+    /// lets the view animate the fields into the opposite visual positions.
     ///
-    /// This keeps the source-of-truth stable and avoids swapping multiple
-    /// paired pieces of state.
-    func swapCurrencies() {
+    /// This keeps the currency source-of-truth stable and avoids swapping
+    /// multiple paired pieces of state.
+    func swapCurrencies(recomputesAmounts: Bool = true) {
         isSwapped.toggle()
+        guard recomputesAmounts else { return }
+        recomputeAfterRateChange()
+    }
+
+    func recomputeAmountsForCurrentState() {
+        recomputeAfterRateChange()
     }
 }
 
 enum ExchangeViewModelError: Error {
-    case rateUnavailable
-}
-
-// MARK: - Formatting helpers
-
-private extension ExchangeViewModel {
-
-    /// Inserts thousands-separator commas into the integer part of a numeric
-    /// string without touching the decimal portion or trailing zeros.
-    ///
-    /// Examples:
-    ///   "9999"    → "9,999"
-    ///   "9999.5"  → "9,999.5"
-    ///   "9999.50" → "9,999.50"   (trailing zero preserved)
-    ///   "9999."   → "9,999."     (mid-typing decimal preserved)
-    ///   ".5"      → ".5"         (no integer part, unchanged)
-    static func withGroupingSeparator(_ raw: String) -> String {
-        guard !raw.isEmpty else { return raw }
-
-        let parts = raw.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
-        let intPart = String(parts[0])
-        let fracPart = parts.count > 1 ? "." + String(parts[1]) : ""
-
-        guard !intPart.isEmpty else { return raw }
-
-        var result = ""
-        for (offset, char) in intPart.reversed().enumerated() {
-            if offset > 0, offset % 3 == 0 { result = "," + result }
-            result = String(char) + result
-        }
-        return result + fracPart
-    }
-
-    /// Strips a trailing "." so `Decimal(string:)` can parse mid-typing input
-    /// like "9999." without returning nil.
-    static func parseable(_ raw: String) -> String {
-        raw.hasSuffix(".") ? String(raw.dropLast()) : raw
-    }
-
-    nonisolated static func formattedAmount(_ amount: Decimal) -> String {
-        amount.formatted(.number.precision(.fractionLength(2)))
-    }
-
-    nonisolated static func updatedText(for date: Date, isStale: Bool) -> String {
-        let formattedDate = date.formatted(
-            .dateTime
-                .month(.abbreviated)
-                .day()
-                .hour()
-                .minute()
-        )
-
-        return isStale
-            ? "Offline. Last updated \(formattedDate)"
-            : "Updated \(formattedDate)"
-    }
-
-    /// Returns `true` when `raw` (commas already stripped) satisfies all limits:
-    ///   • at most one decimal point
-    ///   • parsed value ≤ `maxInputValue`
-    ///   • fractional digits ≤ `maxFractionDigits`
-    ///
-    /// A trailing "." (mid-typing) and an empty string are considered valid so
-    /// the user can keep typing.
-    static func isWithinLimits(_ raw: String) -> Bool {
-        // At most one decimal point.
-        if raw.filter({ $0 == "." }).count > 1 {
-            return false
-        }
-
-        // Check fractional digit count using the raw string — the parser
-        // silently accepts unlimited precision, so we must check here.
-        let parts = raw.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
-        if parts.count > 1, String(parts[1]).count > maxFractionDigits {
-            return false
-        }
-
-        // Check magnitude.
-        if let parsed = Decimal(string: parseable(raw), locale: .usParsing),
-           parsed > maxInputValue {
-            return false
-        }
-
-        return true
-    }
+    case dataUnavailable
 }
 
 // MARK: - Recalculation
 
 private extension ExchangeViewModel {
+    var maxTargetInputValue: Decimal {
+        guard let exchangeRate, exchangeRate.ask > 0 else {
+            return Self.maxInputValue
+        }
+
+        return exchangeRate.convertUsingAsk(Self.maxInputValue)
+    }
+
+    func observeNetworkStatus() {
+        networkStatusTask?.cancel()
+        networkStatusTask = Task { @MainActor [weak self, networkStatusUpdates] in
+            for await isConnected in networkStatusUpdates() {
+                guard !Task.isCancelled else { return }
+                self?.handleNetworkStatusChange(isConnected)
+            }
+        }
+    }
+
+    func handleNetworkStatusChange(_ isConnected: Bool) {
+        if isConnected {
+            if rateStatusIconName == ExchangeRateStatusPresenter.offlineIconName {
+                applyRateStatus(.hidden)
+            }
+            return
+        }
+
+        guard !exchangeRatesByQuoteCode.isEmpty else { return }
+        applySelectedRate(forcesOfflineStatus: true)
+    }
+
+    func seedInitialRate(_ rate: ExchangeRate) {
+        let snapshot = ExchangeRateSnapshot(
+            rate: rate,
+            fetchedAt: rate.quotedAt,
+            isStale: false
+        )
+        exchangeRate = rate
+        exchangeRatesByQuoteCode = [
+            rate.quote.code.uppercased(): snapshot
+        ]
+        applyRateStatus(.hidden)
+    }
+
+    /// Applies a currency list without touching rates.
+    ///
+    /// Used when a refresh produced a usable catalog but failed to fetch rates.
+    /// Keeping the catalog visible lets the user open the currency picker even
+    /// while the app is offline on a cold start.
+    func applyCurrencyListOnly(_ list: CurrencyListSnapshot) {
+        availableCurrencies = list.currencies
+
+        if !availableCurrencies.contains(targetCurrency),
+           let firstCurrency = availableCurrencies.first {
+            targetCurrency = firstCurrency
+            clearCalculatedText()
+        }
+    }
+
+    func applyDataSnapshot(
+        _ snapshot: ExchangeDataSnapshot,
+        showsStaleRateStatus: Bool
+    ) {
+        availableCurrencies = snapshot.currencyList.currencies
+        exchangeRatesByQuoteCode = snapshot.exchangeRatesByQuoteCode
+
+        if !availableCurrencies.contains(targetCurrency),
+           let firstCurrency = availableCurrencies.first {
+            targetCurrency = firstCurrency
+            clearCalculatedText()
+        }
+
+        if exchangeRatesByQuoteCode[targetCurrency.code.uppercased()] == nil,
+           let firstRatedCurrency = availableCurrencies.first(where: {
+               exchangeRatesByQuoteCode[$0.code.uppercased()] != nil
+           }) {
+            targetCurrency = firstRatedCurrency
+            clearCalculatedText()
+        }
+
+        applySelectedRate(showsStaleRateStatus: showsStaleRateStatus)
+    }
+
+    func handleRefreshFailure(_ error: Error) {
+        showsManualRefresh = exchangeRatesByQuoteCode.isEmpty
+        if exchangeRatesByQuoteCode.isEmpty {
+            exchangeRate = nil
+            applyRateStatus(.hidden)
+            if case DolarAPIError.noInternetConnection = error {
+                rateErrorText = ExchangeRateStatusPresenter.offlineErrorText
+            } else {
+                rateErrorText = ExchangeRateStatusPresenter.unavailableErrorText
+            }
+        } else {
+            applySelectedRate(forcesOfflineStatus: true)
+        }
+    }
+
+    func applySelectedRate(
+        showsStaleRateStatus: Bool = false,
+        forcesOfflineStatus: Bool = false
+    ) {
+        let key = targetCurrency.code.uppercased()
+
+        guard let snapshot = exchangeRatesByQuoteCode[key] else {
+            exchangeRate = nil
+            applyRateStatus(.hidden)
+            showsManualRefresh = exchangeRatesByQuoteCode.isEmpty
+            if exchangeRatesByQuoteCode.isEmpty {
+                rateErrorText = ExchangeRateStatusPresenter.unavailableErrorText
+            } else {
+                clearCalculatedText()
+            }
+            return
+        }
+
+        exchangeRate = snapshot.rate
+        applyRateStatus(
+            ExchangeRateStatusPresenter.status(
+                for: snapshot,
+                showsStaleRateStatus: showsStaleRateStatus,
+                forcesOfflineStatus: forcesOfflineStatus
+            )
+        )
+        rateErrorText = nil
+        showsManualRefresh = false
+        recomputeAfterRateChange()
+    }
+
+    func applyRateStatus(_ status: RateStatusPresentation) {
+        rateStatusText = status.text
+        rateStatusIconName = status.iconName
+        rateStatusTone = status.tone
+    }
+
     func recomputeAfterRateChange() {
         switch lastEditedField {
         case .source:
@@ -345,13 +445,13 @@ private extension ExchangeViewModel {
     }
 
     func setCalculatedSourceText(_ amount: Decimal?) {
-        let text = amount.map(Self.formattedAmount) ?? ""
+        let text = amount.map(AmountInputFormatter.formattedAmount) ?? ""
         sourceText = text
         lastValidSourceText = text
     }
 
     func setCalculatedTargetText(_ amount: Decimal?) {
-        let text = amount.map(Self.formattedAmount) ?? ""
+        let text = amount.map(AmountInputFormatter.formattedAmount) ?? ""
         targetText = text
         lastValidTargetText = text
     }
@@ -361,12 +461,4 @@ private extension ExchangeViewModel {
         setCalculatedSourceText(nil)
         setCalculatedTargetText(nil)
     }
-}
-
-// MARK: - Locale helper
-
-private extension Locale {
-    /// Fixed locale for decimal parsing — prevents `Decimal(string:)` from
-    /// misinterpreting locale-specific decimal separators.
-    static let usParsing = Locale(identifier: "en_US_POSIX")
 }

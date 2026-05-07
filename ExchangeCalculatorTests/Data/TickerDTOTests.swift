@@ -7,7 +7,6 @@
 
 import Foundation
 import Testing
-import Nimble
 @testable import ExchangeCalculator
 
 @Suite("TickerDTO")
@@ -26,10 +25,10 @@ struct TickerDTOTests {
         let sut = try JSONDecoder().decode(TickerDTO.self, from: Data(json.utf8))
         let rate = try sut.exchangeRate(base: TestFixtures.usdc, quote: TestFixtures.mxn)
 
-        expect(sut.quoteCurrencyCode(baseCurrency: TestFixtures.usdc)).to(equal("MXN"))
-        expect(rate.bid).to(equal(Decimal(string: "18.4069700000")!))
-        expect(rate.ask).to(equal(Decimal(string: "18.4105000000")!))
-        expect(rate.rate).to(equal(Decimal(string: "18.4069700000")!))
+        #expect(sut.quoteCurrencyCode(baseCurrency: TestFixtures.usdc) == "MXN")
+        #expect(rate.bid == Decimal(string: "18.4069700000")!)
+        #expect(rate.ask == Decimal(string: "18.4105000000")!)
+        #expect(rate.rate == Decimal(string: "18.4069700000")!)
     }
 
     @Test("Rejects malformed ticker values")
@@ -41,7 +40,8 @@ struct TickerDTOTests {
             date: "2025-10-20T20:14:57.361483956"
         )
 
-        expect { try sut.exchangeRate(base: TestFixtures.usdc, quote: TestFixtures.mxn) }
-            .to(throwError(DolarAPIError.invalidTicker("usdc_mxn")))
+        #expect(throws: DolarAPIError.invalidTicker("usdc_mxn")) {
+            try sut.exchangeRate(base: TestFixtures.usdc, quote: TestFixtures.mxn)
+        }
     }
 }

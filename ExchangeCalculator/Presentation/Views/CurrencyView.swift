@@ -8,12 +8,12 @@
 import SwiftUI
 
 struct CurrencyView: View {
-    
+
     enum CurrencyViewStyle {
         case plain
         case picker /// brings additional background underneath of the flag's view
     }
-    
+
     private let currency: Currency
     private let style: CurrencyViewStyle
     /// Shows a trailing `chevron.down` to advertise that the view is tappable.
@@ -35,19 +35,27 @@ struct CurrencyView: View {
     }
     
     var body: some View {
-        HStack(spacing: Size.Spacing.medium) {
+        HStack(spacing: horizontalSpacing) {
             flagContainer
             
             Text(currency.code)
                 .font(.body)
                 .fontWeight(.semibold)
                 .foregroundStyle(.primary)
+            
+            Image(systemName: "chevron.down")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.primary)
+                .opacity(showsChevron ? 1 : 0)
+        }
+    }
 
-            if showsChevron {
-                Image(systemName: "chevron.down")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
+    private var horizontalSpacing: CGFloat {
+        switch style {
+        case .plain:
+            Size.Spacing.small
+        case .picker:
+            Size.Spacing.medium
         }
     }
 

@@ -6,14 +6,13 @@
 //
 
 struct LoadAvailableCurrenciesUseCase {
-    private let repository: CurrencyRepository
+    private let repository: CurrencyRepositoryProtocol
 
-    init(repository: CurrencyRepository) {
+    init(repository: CurrencyRepositoryProtocol) {
         self.repository = repository
     }
 
-    func callAsFunction() async -> CurrencyListSnapshot {
-        await repository.availableCurrencies()
+    func callAsFunction() async throws -> CurrencyListSnapshot {
+        try await repository.availableCurrencies()
     }
 }
-

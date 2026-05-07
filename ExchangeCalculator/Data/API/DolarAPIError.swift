@@ -10,6 +10,7 @@ import Foundation
 enum DolarAPIError: Error, Equatable {
     case invalidURL
     case invalidResponse
+    case noInternetConnection
     case httpStatus(Int)
     case decoding(Error)
     case invalidTicker(String)
@@ -18,7 +19,8 @@ enum DolarAPIError: Error, Equatable {
     static func == (lhs: DolarAPIError, rhs: DolarAPIError) -> Bool {
         switch (lhs, rhs) {
         case (.invalidURL, .invalidURL),
-             (.invalidResponse, .invalidResponse):
+             (.invalidResponse, .invalidResponse),
+             (.noInternetConnection, .noInternetConnection):
             true
         case let (.httpStatus(lhsCode), .httpStatus(rhsCode)):
             lhsCode == rhsCode
@@ -33,4 +35,3 @@ enum DolarAPIError: Error, Equatable {
         }
     }
 }
-

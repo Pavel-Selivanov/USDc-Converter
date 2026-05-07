@@ -8,17 +8,11 @@
 import SwiftUI
 
 extension Color {
-    /// The green used to display the live exchange rate.
-    /// Source: Colors.xcassets / Content / contentBrand (#22D081).
     static let contentBrand = Color.Content.contentBrand
-    
     static let contentBackground = Color.Content.contentBackground
 }
 
 #if DEBUG
-
-// MARK: Color to debug views
-
 extension Color {
     static var random: Color {
         Color(

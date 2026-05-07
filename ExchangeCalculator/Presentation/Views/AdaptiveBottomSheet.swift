@@ -16,11 +16,7 @@ struct AdaptiveBottomSheet: ViewModifier {
     @State private var contentHeight: CGFloat = 0
     @State private var windowHeight: CGFloat = 0
 
-    public init(
-        animation: Animation = .smooth(duration: 0.25),
-        maxHeightRatio: CGFloat = 0.9,
-        verticalScreenPadding: CGFloat = 48
-    ) {
+    public init(animation: Animation, maxHeightRatio: CGFloat, verticalScreenPadding: CGFloat) {
         self.animation = animation
         self.maxHeightRatio = maxHeightRatio
         self.verticalScreenPadding = verticalScreenPadding

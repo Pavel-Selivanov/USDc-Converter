@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct JSONFileStore<Value: Codable> {
+nonisolated struct JSONFileStore<Value: Codable> {
     private let fileURL: URL
     private let fileManager: FileManager
 
@@ -42,7 +42,7 @@ struct JSONFileStore<Value: Codable> {
 }
 
 private extension FileManager {
-    var exchangeCalculatorCacheDirectory: URL {
+    nonisolated var exchangeCalculatorCacheDirectory: URL {
         urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ExchangeCalculator", isDirectory: true)
     }

@@ -5,18 +5,14 @@
 //  Created by Pavel Selivanov on 5/7/26.
 //
 
-struct LoadExchangeRateUseCase {
-    private let repository: ExchangeRateRepository
+struct LoadExchangeRatesUseCase {
+    private let repository: ExchangeRateRepositoryProtocol
 
-    init(repository: ExchangeRateRepository) {
+    init(repository: ExchangeRateRepositoryProtocol) {
         self.repository = repository
     }
 
-    func callAsFunction(
-        for quote: Currency,
-        forceRefresh: Bool = false
-    ) async throws -> ExchangeRateSnapshot {
-        try await repository.exchangeRate(for: quote, forceRefresh: forceRefresh)
+    func callAsFunction(for quotes: [Currency]) async throws -> [String: ExchangeRateSnapshot] {
+        try await repository.exchangeRates(for: quotes)
     }
 }
-

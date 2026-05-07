@@ -23,8 +23,18 @@ enum TestFixtures {
         ExchangeRate(base: usdc, quote: quote, rate: rate, quotedAt: date)
     }
 
+    static func rate(
+        quote: Currency = mxn,
+        bid: Decimal,
+        ask: Decimal
+    ) -> ExchangeRate {
+        ExchangeRate(base: usdc, quote: quote, bid: bid, ask: ask, quotedAt: date)
+    }
+
+    @MainActor
     static func viewModel(
         exchangeRate: ExchangeRate? = rate(),
+        onQuoteCurrencySelected: @escaping ExchangeViewModel.OnQuoteCurrencySelected = { _ in },
         remoteRateForQuote: @escaping (Currency) throws -> ExchangeRate = { quote in
             rate(quote: quote)
         }
@@ -32,23 +42,50 @@ enum TestFixtures {
         ExchangeViewModel(
             sourceCurrency: usdc,
             targetCurrency: mxn,
-            pickableCurrencies: [mxn, ars, brl],
+            availableCurrencies: [mxn, ars, brl],
             exchangeRate: exchangeRate,
-            loadCurrencies: {
-                CurrencyListSnapshot(
-                    currencies: [mxn, ars, brl],
-                    source: .fallback,
-                    updatedAt: nil
+            loadData: {
+                let currencies = [mxn, ars, brl]
+                let rates = try currencies.reduce(into: [String: ExchangeRateSnapshot]()) { result, quote in
+                    result[quote.code.uppercased()] = ExchangeRateSnapshot(
+                        rate: try remoteRateForQuote(quote),
+                        fetchedAt: date,
+                        isStale: false
+                    )
+                }
+
+                return .complete(
+                    ExchangeDataSnapshot(
+                        currencyList: CurrencyListSnapshot(
+                            currencies: currencies,
+                            source: .fallback,
+                            updatedAt: nil
+                        ),
+                        exchangeRatesByQuoteCode: rates
+                    )
                 )
             },
-            loadExchangeRate: { quote, _ in
-                ExchangeRateSnapshot(
-                    rate: try remoteRateForQuote(quote),
+            onQuoteCurrencySelected: onQuoteCurrencySelected
+        )
+    }
+
+    static func exchangeData(
+        currencies: [Currency] = [mxn, ars, brl],
+        rates: [ExchangeRate] = [rate()]
+    ) -> ExchangeDataSnapshot {
+        ExchangeDataSnapshot(
+            currencyList: CurrencyListSnapshot(
+                currencies: currencies,
+                source: .cache,
+                updatedAt: date
+            ),
+            exchangeRatesByQuoteCode: rates.reduce(into: [:]) { result, rate in
+                result[rate.quote.code.uppercased()] = ExchangeRateSnapshot(
+                    rate: rate,
                     fetchedAt: date,
-                    isStale: false
+                    isStale: true
                 )
             }
         )
     }
 }
-

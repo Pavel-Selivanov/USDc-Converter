@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct TickerDTO: Decodable, Equatable {
+nonisolated struct TickerDTO: Decodable, Equatable, Sendable {
     let ask: String
     let bid: String
     let book: String
@@ -44,5 +44,5 @@ struct TickerDTO: Decodable, Equatable {
 }
 
 private extension Locale {
-    static let apiParsing = Locale(identifier: "en_US_POSIX")
+    nonisolated static let apiParsing = Locale(identifier: "en_US_POSIX")
 }

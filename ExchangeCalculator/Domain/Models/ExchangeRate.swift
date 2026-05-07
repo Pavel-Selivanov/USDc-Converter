@@ -7,8 +7,8 @@
 
 import Foundation
 
-/// An exchange quote returned by the backend.
-nonisolated struct ExchangeRate: Codable, Equatable {
+/// An exchange quote in the app's business model.
+nonisolated struct ExchangeRate: Equatable, Sendable {
     let base: Currency
     let quote: Currency
     let bid: Decimal
@@ -47,6 +47,10 @@ nonisolated struct ExchangeRate: Codable, Equatable {
         amount * rate
     }
 
+    func convertUsingAsk(_ amount: Decimal) -> Decimal {
+        amount * ask
+    }
+
     func convertInverse(_ amount: Decimal) -> Decimal {
         guard ask != 0 else { return 0 }
         return amount / ask
@@ -64,8 +68,4 @@ nonisolated struct ExchangeRate: Codable, Equatable {
         )
     }
 
-    var displayString: String {
-        let formatted = rate.formatted(.number.precision(.fractionLength(4)))
-        return "1 \(base.code) = \(formatted) \(quote.code)"
-    }
 }

@@ -8,30 +8,24 @@
 import Foundation
 
 final class DolarAPIClient {
+    private static let defaultTimeout: TimeInterval = 5
+
     private let baseURL: URL
     private let session: URLSession
 
     init(
         baseURL: URL = URL(string: "https://api.dolarapp.dev/v1")!,
-        session: URLSession = .shared
+        session: URLSession = DolarAPIClient.makeSession()
     ) {
         self.baseURL = baseURL
         self.session = session
     }
 
-    func fetchAvailableCurrencyCodes() async throws -> [String] {
-        try await request("tickers-currencies")
-    }
-
-    func fetchTickers(currencies: [String]) async throws -> [TickerDTO] {
-        let codes = currencies
-            .map { $0.uppercased() }
-            .joined(separator: ",")
-
-        return try await request(
-            "tickers",
-            queryItems: [URLQueryItem(name: "currencies", value: codes)]
-        )
+    private static func makeSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = defaultTimeout
+        configuration.timeoutIntervalForResource = defaultTimeout
+        return URLSession(configuration: configuration)
     }
 
     private func request<T: Decodable>(
@@ -46,6 +40,10 @@ final class DolarAPIClient {
 
         guard let url = components?.url else {
             throw DolarAPIError.invalidURL
+        }
+
+        guard InternetConnectionManager.shared.isConnectedToNetwork else {
+            throw DolarAPIError.noInternetConnection
         }
 
         let (data, response) = try await session.data(from: url)
@@ -63,5 +61,24 @@ final class DolarAPIClient {
         } catch {
             throw DolarAPIError.decoding(error)
         }
+    }
+}
+
+extension DolarAPIClient: CurrencyRemoteDataSource {
+    func fetchAvailableCurrencyCodes() async throws -> [String] {
+        try await request("tickers-currencies")
+    }
+}
+
+extension DolarAPIClient: ExchangeRateRemoteDataSource {
+    func fetchTickers(currencies: [String]) async throws -> [TickerDTO] {
+        let codes = currencies
+            .map { $0.uppercased() }
+            .joined(separator: ",")
+
+        return try await request(
+            "tickers",
+            queryItems: [URLQueryItem(name: "currencies", value: codes)]
+        )
     }
 }

@@ -5,7 +5,6 @@
 //  Created by Pavel Selivanov on 5/7/26.
 //
 
-import Nimble
 import Testing
 @testable import ExchangeCalculator
 
@@ -19,7 +18,7 @@ struct AppRouterTests {
 
         sut.showCurrencyPicker()
 
-        expect(sut.presentedSheet).to(equal(.currencyPicker))
+        #expect(sut.presentedSheet == .currencyPicker)
     }
 
     @Test("dismissPresentedSheet clears the current sheet")
@@ -29,6 +28,6 @@ struct AppRouterTests {
 
         sut.dismissPresentedSheet()
 
-        expect(sut.presentedSheet).to(beNil())
+        #expect(sut.presentedSheet == nil)
     }
 }

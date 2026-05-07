@@ -9,25 +9,20 @@ import SwiftUI
 
 struct AppRouterView: View {
 
-    @State private var router: AppRouter
-    @State private var exchangeViewModel: ExchangeViewModel
+    @Binding private var router: AppRouter
+    private let exchangeViewModel: ExchangeViewModel
 
-    init(
-        router: AppRouter = AppRouter(),
-        exchangeViewModel: ExchangeViewModel = AppDependencies.makeExchangeViewModel()
-    ) {
-        self._router = State(initialValue: router)
-        self._exchangeViewModel = State(initialValue: exchangeViewModel)
+    init(router: Binding<AppRouter>, exchangeViewModel: ExchangeViewModel) {
+        self._router = router
+        self.exchangeViewModel = exchangeViewModel
     }
 
     var body: some View {
-        @Bindable var bindableRouter = router
-
         ExchangeView(
             viewModel: exchangeViewModel,
             routing: router
         )
-        .sheet(item: $bindableRouter.presentedSheet) { sheet in
+        .sheet(item: $router.presentedSheet) { sheet in
             sheetContent(for: sheet)
                 .adaptiveBottomSheet()
         }
@@ -43,11 +38,11 @@ struct AppRouterView: View {
 
     private var currencyPickerSheet: some View {
         BottomSheet(
-            title: "Choose currency",
+            title: String(localized: "Choose currency"),
             onClose: router.dismissPresentedSheet
         ) {
             CurrencyPickerList(
-                currencies: exchangeViewModel.pickableCurrencies,
+                currencies: exchangeViewModel.availableCurrencies,
                 selected: exchangeViewModel.targetCurrency,
                 onSelect: { picked in
                     Task {
