@@ -26,6 +26,8 @@ final class AppDependencies {
         cache: exchangeRateCache,
         baseCurrency: baseCurrency
     )
+    
+    private lazy var historyRepository = HistoryRepository()
 
     private lazy var loadCurrencies = LoadAvailableCurrenciesUseCase(repository: currencyRepository)
 
@@ -35,6 +37,10 @@ final class AppDependencies {
         loadCurrencies: loadCurrencies,
         loadExchangeRates: loadExchangeRates
     )
+    
+    private lazy var loadCachedHistory = LoadHistoryUseCase(repository: historyRepository)
+    private lazy var saveHistoryRecord = SaveHistoryRecordUseCase(repository: historyRepository)
+    private lazy var deleteAllHistoryRecords = DeleteAllHistoryRecordsUseCase(repository: historyRepository)
 
     func makeExchangeViewModel() -> ExchangeViewModel {
         ExchangeViewModel(
@@ -46,9 +52,17 @@ final class AppDependencies {
             onQuoteCurrencySelected: { [quoteCurrencySelectionStore] currency in
                 quoteCurrencySelectionStore.save(currency)
             },
+            onSaveHistoryRecord: { record in self.saveHistoryRecord(record) },
             networkStatusUpdates: {
                 InternetConnectionManager.shared.connectionStatusUpdates
             }
+        )
+    }
+    
+    func makeHistoryViewModel() -> HistoryViewModel {
+        HistoryViewModel(
+            loadHistoryData: { self.loadCachedHistory() },
+            deleteAllHistoryRecords: { self.deleteAllHistoryRecords() }
         )
     }
 

@@ -11,10 +11,12 @@ struct AppRouterView: View {
 
     @Binding private var router: AppRouter
     private let exchangeViewModel: ExchangeViewModel
+    private let historyViewModel: HistoryViewModel
 
-    init(router: Binding<AppRouter>, exchangeViewModel: ExchangeViewModel) {
+    init(router: Binding<AppRouter>, exchangeViewModel: ExchangeViewModel, historyViewModel: HistoryViewModel) {
         self._router = router
         self.exchangeViewModel = exchangeViewModel
+        self.historyViewModel = historyViewModel
     }
 
     var body: some View {
@@ -33,6 +35,8 @@ struct AppRouterView: View {
         switch sheet {
         case .currencyPicker:
             currencyPickerSheet
+        case .history:
+            historyView
         }
     }
 
@@ -51,6 +55,15 @@ struct AppRouterView: View {
                     router.dismissPresentedSheet()
                 }
             )
+        }
+    }
+    
+    private var historyView: some View {
+        BottomSheet(
+            title: String(localized: "History"),
+            onClose: router.dismissPresentedSheet
+        ) {
+            HistoryView(viewModel: historyViewModel)
         }
     }
 }
