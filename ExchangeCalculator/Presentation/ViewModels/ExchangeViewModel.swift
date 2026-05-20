@@ -13,6 +13,7 @@ import Foundation
 final class ExchangeViewModel {
     typealias LoadCachedExchangeData = () async -> ExchangeDataSnapshot?
     typealias LoadExchangeData = () async throws -> ExchangeDataLoadOutcome
+    typealias OnSaveHistoryRecord = (HistoryRecord) -> Void
     typealias OnQuoteCurrencySelected = (Currency) -> Void
     typealias NetworkStatusUpdates = () -> AsyncStream<Bool>
 
@@ -36,6 +37,8 @@ final class ExchangeViewModel {
     /// Toggles each time `swapCurrencies()` is called. Drives the visual field
     /// order while keeping the source and target views stable in the hierarchy.
     private(set) var isSwapped: Bool = false
+    
+    private let debouncer = Debouncer(delayInSeconds: 2.0)
 
     // MARK: - Input limits
 
@@ -55,6 +58,7 @@ final class ExchangeViewModel {
     @ObservationIgnored private let loadCachedExchangeData: LoadCachedExchangeData
     @ObservationIgnored private let loadExchangeData: LoadExchangeData
     @ObservationIgnored private let onQuoteCurrencySelected: OnQuoteCurrencySelected
+    @ObservationIgnored private let onSaveHistoryRecord: OnSaveHistoryRecord
     @ObservationIgnored private let networkStatusUpdates: NetworkStatusUpdates
 
     // MARK: - Derived
@@ -80,6 +84,7 @@ final class ExchangeViewModel {
             throw ExchangeViewModelError.dataUnavailable
         },
         onQuoteCurrencySelected: @escaping OnQuoteCurrencySelected = { _ in },
+        onSaveHistoryRecord: @escaping OnSaveHistoryRecord = { _ in },
         networkStatusUpdates: @escaping NetworkStatusUpdates = {
             AsyncStream { continuation in
                 continuation.finish()
@@ -93,6 +98,7 @@ final class ExchangeViewModel {
         self.loadCachedExchangeData = loadCachedData
         self.loadExchangeData = loadData
         self.onQuoteCurrencySelected = onQuoteCurrencySelected
+        self.onSaveHistoryRecord = onSaveHistoryRecord
         self.networkStatusUpdates = networkStatusUpdates
 
         if let initialExchangeData {
@@ -203,6 +209,7 @@ final class ExchangeViewModel {
             let rate = exchangeRate
         else {
             if raw.isEmpty { targetText = "" }
+            debouncer.cancel()
             return
         }
         
@@ -210,6 +217,10 @@ final class ExchangeViewModel {
             ? rate.convertUsingAsk(amount)
             : rate.convert(amount)
         setCalculatedTargetText(convertedAmount)
+        
+        if convertedAmount > 0 {
+            saveToHistoryIfNeeded()
+        }
     }
 
     /// Called when the user edits the target field.
@@ -240,9 +251,30 @@ final class ExchangeViewModel {
             let rate = exchangeRate
         else {
             if raw.isEmpty { sourceText = "" }
+            debouncer.cancel()
             return
         }
         setCalculatedSourceText(rate.convertInverse(amount))
+        
+        if amount > 0 {
+            saveToHistoryIfNeeded()
+        }
+    }
+    
+    private func saveToHistoryIfNeeded() {
+        let id = UUID()
+        let sourceCur = isSwapped ? targetCurrency : sourceCurrency
+        let targetCur = isSwapped ? sourceCurrency : targetCurrency
+        let sourceValue = isSwapped ? targetText : sourceText
+        let targetValue = isSwapped ? sourceText : targetText
+        let record = HistoryRecord(
+            id: id, sourceCurrency: sourceCur, sourceValue: sourceValue,
+            targetCurrency: targetCur, targetValue: targetValue
+        )
+        
+        debouncer.submit { [weak self, record] in
+            self?.onSaveHistoryRecord(record)
+        }
     }
 
     /// Replaces the quote currency and recomputes the visible amount so the

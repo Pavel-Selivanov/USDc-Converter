@@ -9,10 +9,12 @@ import Observation
 
 protocol AppRouting: AnyObject {
     func showCurrencyPicker()
+    func showHistoryView()
 }
 
 enum AppSheet: String, Identifiable, Equatable {
     case currencyPicker
+    case history
 
     var id: String { rawValue }
 }
@@ -24,6 +26,10 @@ final class AppRouter: AppRouting {
 
     func showCurrencyPicker() {
         presentedSheet = .currencyPicker
+    }
+    
+    func showHistoryView() {
+        presentedSheet = .history
     }
 
     func dismissPresentedSheet() {

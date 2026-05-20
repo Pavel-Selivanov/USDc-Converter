@@ -8,7 +8,6 @@ SwiftUI exchange calculator for converting between USDc and supported currencies
 - App has basic offline support by caching currencies and rates. Indicating to the user when data is stale.
 - EUR is not supported by the API, so we don't have it for now in the app.
 
-
 ## Architecture
 - `Domain`: currency/rate entities, repository protocols.
 - `Data`: API client, DTOs, device caches, repositories, and dependency assembly.
@@ -37,8 +36,25 @@ SwiftUI exchange calculator for converting between USDc and supported currencies
   - avoid calls while offline, show it to the user.
 - Unit tests (coverage for rate math, DTO parsing, input validation, currency selection, swap behavior, and fallback currency behavior.)
 
-
 ## Out of scope
 - Dark mode
 - Exponential backoff retry for remote data sync
 - Real-time streaming rates (should we decide to use the code into money transfer module where exact rate is crucial).
+
+## History
+
+We want to show history of cross rates.
+I envision this as a pair of currencies + input / output values.
+Core UI element / stack is a List.
+One row should have 2 currencies and 2 saved values.
+CRD: create (add), read (fetch -> dispay) and delete.
+CTA: clean history.
+Row: flag name value -> flag name value
+Optimization: do not keep USDs and only the second currency.
+
+Next:
+1. link use cases to the HistoryViewModel
+2. Customize "History" title into "Edit" and show "Clear all"
+3. Delete one record.
+4. Delete all records.
+5. Enhance History Repository to fetch records only once.

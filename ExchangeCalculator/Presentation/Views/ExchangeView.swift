@@ -60,10 +60,16 @@ struct ExchangeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Exchange calculator")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundStyle(.primary)
+            HStack {
+                Text("Exchange calculator")
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                historyButton
+            }
 
             Text(viewModel.displayRate ?? " ")
                 .font(.subheadline)
@@ -99,6 +105,17 @@ struct ExchangeView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    private var historyButton: some View {
+        Button {
+            routing.showHistoryView()
+        } label: {
+            Image(systemName: "clock")
+                .font(.system(.title3))
+                .foregroundStyle(Color.primary)
+        }
+        .frame(width: 44, height: 44)
     }
 
     private var rateStatusColor: Color {

@@ -12,15 +12,18 @@ struct ExchangeCalculatorApp: App {
     
     @State private var router: AppRouter
     @State private var exchangeViewModel: ExchangeViewModel
+    @State private var historyViewModel: HistoryViewModel
     
     init() {
         self.router = AppRouter()
-        self.exchangeViewModel = AppDependencies().makeExchangeViewModel()
+        let dependencies = AppDependencies()
+        self.exchangeViewModel = dependencies.makeExchangeViewModel()
+        self.historyViewModel = dependencies.makeHistoryViewModel()
     }
     
     var body: some Scene {
         WindowGroup {
-            AppRouterView(router: $router, exchangeViewModel: exchangeViewModel)
+            AppRouterView(router: $router, exchangeViewModel: exchangeViewModel, historyViewModel: historyViewModel)
                 .preferredColorScheme(.light)
         }
     }
