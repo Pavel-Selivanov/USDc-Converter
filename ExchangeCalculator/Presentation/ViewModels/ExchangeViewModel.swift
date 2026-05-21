@@ -467,9 +467,9 @@ private extension ExchangeViewModel {
 // MARK: - All Rates Interface
 
 extension ExchangeViewModel {
-    func bidAskRates(currency: Currency) -> (bid: Decimal, ask: Decimal)? {
+    func bidAskRates(currency: Currency) -> (bid: Decimal?, ask: Decimal?) {
         guard let exchangeRate = exchangeRatesByQuoteCode[currency.code.uppercased()] else {
-            return nil
+            return (bid: nil, ask: nil)
         }
         
         return (bid: exchangeRate.rate.bid, ask: exchangeRate.rate.ask)

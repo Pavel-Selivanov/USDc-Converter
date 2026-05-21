@@ -49,3 +49,5 @@ SwiftUI exchange calculator for converting between USDc and supported currencies
 3. Reuse the currency view to show a list of them.
 4. Reuse repository to display all available rates. Кeuse "ExchangeRate" for now, yet for the further enhancement - we can use a protocol.
 5. A trade off I see right now is that we keep data refreshed on each tab initial appearance, so 
+6. All rates screen has search bar to search and filter by either currency name or currency code.
+7. All rates screen has sorting.

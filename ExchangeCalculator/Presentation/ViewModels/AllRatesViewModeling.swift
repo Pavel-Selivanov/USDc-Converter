@@ -10,7 +10,7 @@ import Observation
 
 protocol AllRatesViewModeling: AnyObject, Observable {
     var availableCurrencies: [Currency] { get }
-    func bidAskRates(currency: Currency) -> (bid: Decimal, ask: Decimal)?
+    func bidAskRates(currency: Currency) -> (bid: Decimal?, ask: Decimal?)
     func selectQuoteCurrency(_ currency: Currency) async
     
     func loadAllRatesIfNeeded() async
