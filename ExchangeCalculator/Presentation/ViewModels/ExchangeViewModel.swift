@@ -10,7 +10,8 @@ import Foundation
 
 @MainActor
 @Observable
-final class ExchangeViewModel {
+final class ExchangeViewModel: AllRatesViewModeling {
+    
     typealias LoadCachedExchangeData = () async -> ExchangeDataSnapshot?
     typealias LoadExchangeData = () async throws -> ExchangeDataLoadOutcome
     typealias OnQuoteCurrencySelected = (Currency) -> Void
@@ -51,7 +52,7 @@ final class ExchangeViewModel {
     @ObservationIgnored private var dataRequestID: Int = 0
     @ObservationIgnored private var dataLoadTask: Task<Result<ExchangeDataLoadOutcome, Error>, Never>?
     @ObservationIgnored private var networkStatusTask: Task<Void, Never>?
-    @ObservationIgnored private var exchangeRatesByQuoteCode: [String: ExchangeRateSnapshot] = [:]
+    private var exchangeRatesByQuoteCode: [String: ExchangeRateSnapshot] = [:]
     @ObservationIgnored private let loadCachedExchangeData: LoadCachedExchangeData
     @ObservationIgnored private let loadExchangeData: LoadExchangeData
     @ObservationIgnored private let onQuoteCurrencySelected: OnQuoteCurrencySelected
@@ -460,5 +461,25 @@ private extension ExchangeViewModel {
         lastEditedField = nil
         setCalculatedSourceText(nil)
         setCalculatedTargetText(nil)
+    }
+}
+
+// MARK: - All Rates Interface
+
+extension ExchangeViewModel {
+    func bidAskRates(currency: Currency) -> (bid: Decimal, ask: Decimal)? {
+        guard let exchangeRate = exchangeRatesByQuoteCode[currency.code.uppercased()] else {
+            return nil
+        }
+        
+        return (bid: exchangeRate.rate.bid, ask: exchangeRate.rate.ask)
+    }
+    
+    func loadAllRatesIfNeeded() async {
+        await loadInitialData()
+    }
+    
+    func refreshAllRates() async {
+        await refreshData()
     }
 }

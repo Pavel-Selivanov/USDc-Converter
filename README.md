@@ -42,3 +42,10 @@ SwiftUI exchange calculator for converting between USDc and supported currencies
 - Dark mode
 - Exponential backoff retry for remote data sync
 - Real-time streaming rates (should we decide to use the code into money transfer module where exact rate is crucial).
+
+## All-rates-tab
+1. Add second tab, keep using AppRouter as a single source of truth for navigation.
+2. Add AllRatesView with empty state.
+3. Reuse the currency view to show a list of them.
+4. Reuse repository to display all available rates. Кeuse "ExchangeRate" for now, yet for the further enhancement - we can use a protocol.
+5. A trade off I see right now is that we keep data refreshed on each tab initial appearance, so 
