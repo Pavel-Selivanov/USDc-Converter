@@ -9,6 +9,7 @@ import Observation
 
 protocol AppRouting: AnyObject {
     func showCurrencyPicker()
+    func showExchange()
 }
 
 enum AppSheet: String, Identifiable, Equatable {
@@ -19,8 +20,14 @@ enum AppSheet: String, Identifiable, Equatable {
 
 @Observable
 final class AppRouter: AppRouting {
+    
+    var selectedTab: Tab = .exchange
 
     var presentedSheet: AppSheet?
+    
+    func showExchange() {
+        selectedTab = .exchange
+    }
 
     func showCurrencyPicker() {
         presentedSheet = .currencyPicker
